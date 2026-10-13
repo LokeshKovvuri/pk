@@ -1,0 +1,26 @@
+# Local PostgreSQL + the app in one command:  docker compose up --build   ->  http://localhost:8000
+# The database and every table are created automatically on first start. Data persists in the "pgdata" volume.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: promise
+      POSTGRES_PASSWORD: promise
+      POSTGRES_DB: promise_keeper
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promise -d promise_keeper"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  app:
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      SECRET_KEY: local-dev-secret-change-me-local-dev-secret
+      DATABASE_URL: postgresql://promise:promise@db:5432/promise_keeper
+    ports: ["8000:8000"]
+volumes:
+  pgdata: {}
