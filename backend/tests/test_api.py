@@ -98,3 +98,43 @@ def test_friends_chat_feed_shared(client):
     assert client.get("/api/friends", headers=ha).json() == []
     assert client.get("/api/users/search?username=frank", headers=ha).status_code == 404
     assert client.get("/api/users/search?username=erin", headers=hb).status_code == 404
+
+
+def test_stories_views_and_status(client):
+    from datetime import timedelta
+    from app.db import SessionLocal
+    from app.models import User, utcnow
+
+    ha, _ = register(client, "hana")
+    hb, _ = register(client, "ivan")
+    hc, _ = register(client, "jade")
+    fid = _befriend(client, ha, hb, "ivan")
+
+    # story with a background color; the viewer is recorded once and only the author sees who viewed
+    story = client.post("/api/posts", headers=ha, json={"kind": "story", "text": "Big news", "bg": "violet"}).json()
+    assert story["bg"] == "violet" and story["views"] == 0
+    assert client.post("/api/posts", headers=ha, json={"kind": "story", "text": "x", "bg": "neon"}).status_code == 422
+    assert client.post("/api/posts", headers=ha, json={"kind": "post", "text": "plain", "bg": "teal"}).json()["bg"] == ""
+    assert client.post(f"/api/posts/{story['id']}/view", headers=hb).status_code == 204
+    assert client.post(f"/api/posts/{story['id']}/view", headers=hb).status_code == 204  # idempotent
+    assert client.post(f"/api/posts/{story['id']}/view", headers=hc).status_code == 404  # strangers cannot
+    mine = client.get("/api/feed", headers=ha).json()["stories"][0]
+    assert mine["views"] == 1 and mine["viewed"] is True
+    theirs = client.get("/api/feed", headers=hb).json()["stories"][0]
+    assert theirs["viewed"] is True and theirs["views"] == 0
+    assert [u["username"] for u in client.get(f"/api/posts/{story['id']}/viewers", headers=ha).json()] == ["ivan"]
+    assert client.get(f"/api/posts/{story['id']}/viewers", headers=hb).status_code == 404
+
+    # status with an expiry: friends see it until it runs out
+    me = client.patch("/api/me", headers=ha, json={"status": "At work", "status_hours": 4}).json()
+    assert me["status"] == "At work" and me["status_until"]
+    assert client.get("/api/friends", headers=hb).json()[0]["user"]["status"] == "At work"
+    with SessionLocal() as db:
+        u = db.query(User).filter(User.username == "hana").one()
+        u.status_until = utcnow() - timedelta(minutes=1)
+        db.commit()
+    assert client.get("/api/friends", headers=hb).json()[0]["user"]["status"] == ""
+    assert client.get("/api/me", headers=ha).json()["status"] == ""
+    forever = client.patch("/api/me", headers=ha, json={"status": "Busy", "status_hours": 0}).json()
+    assert forever["status"] == "Busy" and forever["status_until"] is None
+    assert client.patch("/api/me", headers=ha, json={"status": ""}).json()["status"] == ""

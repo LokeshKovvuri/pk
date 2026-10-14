@@ -11,8 +11,12 @@ export function mount(root, ctx) {
     const theme = getTheme();
     root.innerHTML = `<div class="p"><div class="b" style="align-items:center;gap:14px">${avatar(me.name, 56)}<div class="grow"><div class="n" style="font-weight:800;font-size:20px">@${esc(me.username)}</div><div class="meta">${esc(me.email)}</div></div></div>
       <label for="mn">Name</label><input id="mn" maxlength="40" value="${attr(me.name)}">
-      <label for="ms">Status</label><input id="ms" maxlength="100" placeholder="What are you up to?" value="${attr(me.status)}">
-      <button class="wide go" data-act="save">Save profile</button></div>
+      <button class="wide go" data-act="save">Save name</button></div>
+      <div class="group">Status</div><div class="p"><div class="meta">${me.status ? `Showing to friends: <b>${esc(me.status)}</b>${me.status_until ? ' \u00b7 clears ' + new Date(me.status_until).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''}` : 'No status right now. Friends see it next to your name.'}</div>
+      <div class="chips wrap" role="group" aria-label="Quick statuses">${['Available', 'Busy', 'At work', 'Out of town', 'Keeping my word'].map(t => `<button type="button" data-act="preset" data-t="${t}">${t}</button>`).join('')}</div>
+      <label for="ms">Custom status</label><input id="ms" maxlength="100" placeholder="What are you up to?" value="${attr(me.status)}">
+      <label for="mh">Clear after</label><select id="mh"><option value="1">1 hour</option><option value="4">4 hours</option><option value="24" selected>24 hours</option><option value="0">Never</option></select>
+      <div class="row"><button type="button" data-act="clearstatus">Clear</button><button class="go" type="button" data-act="status">Save status</button></div></div>
       <div class="group">Badges</div><div class="p"><div class="badges">${badges.map(([n, l, on]) => `<div class="badge ${on ? '' : 'off'}"><div class="av ${on ? 't0' : 't3'}" style="width:52px;height:52px;font-size:20px;margin:0 auto">${n}</div><div class="m">${l}</div></div>`).join('')}</div></div>
       <div class="group">Reminders</div><div class="p"><div class="b" style="align-items:center"><div class="grow"><div class="t" style="font-weight:600">Due-date alerts</div><div class="meta">A notification when a promise is due today or overdue. Works while the app is open or running in the background.</div></div>
       <button class="sw ${alertsOn() ? 'on' : ''}" role="switch" aria-checked="${alertsOn()}" aria-label="Due-date alerts" data-act="alerts"></button></div><p class="err" id="aerr" role="alert"></p></div>
@@ -24,8 +28,14 @@ export function mount(root, ctx) {
 
   actions(root, async (act, b) => {
     if (act === 'save') {
-      me = { ...me, ...(await api('/me', { method: 'PATCH', body: { name: $('#mn', root).value.trim(), status: $('#ms', root).value.trim() } })) };
+      me = { ...me, ...(await api('/me', { method: 'PATCH', body: { name: $('#mn', root).value.trim() } })) };
       ctx.setUser(me); toast('Saved'); return draw();
+    }
+    if (act === 'preset') { $('#ms', root).value = b.dataset.t; return; }
+    if (act === 'status' || act === 'clearstatus') {
+      const text = act === 'clearstatus' ? '' : $('#ms', root).value.trim();
+      me = { ...me, ...(await api('/me', { method: 'PATCH', body: { status: text, status_hours: +$('#mh', root).value } })) };
+      toast(text ? 'Status saved' : 'Status cleared'); return draw();
     }
     if (act === 'alerts') {
       try { if (alertsOn()) disableAlerts(); else await enableAlerts(); } catch (e) { $('#aerr', root).textContent = e.message; return; }

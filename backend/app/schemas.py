@@ -51,11 +51,13 @@ class AuthOut(BaseModel):
 class MeOut(UserOut):
     email: str
     blocked_count: int = 0
+    status_until: UTC = None
 
 
 class MeUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=40)
     status: Optional[str] = Field(default=None, max_length=100)
+    status_hours: Optional[int] = Field(default=None, ge=0, le=168)  # 0 or missing = never clears
 
 
 # ---- promises
@@ -140,8 +142,12 @@ class MessageOut(ORM):
     created_at: UTC
 
 
+StoryBg = Literal["", "teal", "violet", "amber", "coral", "blue", "dark"]
+
+
 class PostIn(BaseModel):
     kind: Literal["post", "story"] = "post"
+    bg: StoryBg = ""
     text: str = Field(min_length=1, max_length=500)
 
 
@@ -149,12 +155,15 @@ class PostOut(BaseModel):
     id: int
     kind: str
     text: str
+    bg: str = ""
     created_at: UTC
     expires_at: UTC
     author: UserOut
     likes: int
     liked: bool
     mine: bool
+    views: int = 0      # how many friends saw it (only filled in for your own stories)
+    viewed: bool = False
 
 
 class FeedOut(BaseModel):

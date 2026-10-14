@@ -1,7 +1,8 @@
 from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, reconstructor
+from sqlalchemy.orm.attributes import set_committed_value
 
 from .db import Base
 
@@ -18,9 +19,16 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(100), default="")
+    status_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # when the status clears itself
     password_hash: Mapped[str] = mapped_column(String(300))
     recovery_hash: Mapped[str] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    @reconstructor
+    def _hide_expired_status(self) -> None:
+        """An expired status reads as empty everywhere, without a background job."""
+        if self.status_until and self.status_until < utcnow():
+            set_committed_value(self, "status", "")
 
 
 class Promise(Base):
@@ -80,6 +88,7 @@ class Post(Base):
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     kind: Mapped[str] = mapped_column(String(5))  # "post" or "story"
     text: Mapped[str] = mapped_column(String(500))
+    bg: Mapped[str] = mapped_column(String(8), default="", server_default="")  # story background color key
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
@@ -88,6 +97,13 @@ class Like(Base):
     __tablename__ = "likes"
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class StoryView(Base):
+    __tablename__ = "story_views"
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), primary_key=True)
+    viewer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class SharedPromise(Base):

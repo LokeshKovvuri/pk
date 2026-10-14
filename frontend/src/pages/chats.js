@@ -30,7 +30,7 @@ export function mount(root, ctx) {
   function thread(f) {
     open = f; msgs = [];
     root.innerHTML = `<button class="wide" data-act="back" style="margin:0 0 10px">Back</button>
-      <div class="group" style="margin-top:0">${esc(f.user.name)} @${esc(f.user.username)}</div>
+      <div class="group" style="margin-top:0">${esc(f.user.name)} @${esc(f.user.username)}${f.user.status ? ' \u00b7 ' + esc(f.user.status) : ''}</div>
       <div id="msgs" class="person"></div>
       <div class="row"><input id="ci" maxlength="1000" placeholder="Message" autocomplete="off" style="flex:3"><button class="go" data-act="send" style="flex:1">Send</button></div>`;
     paint();

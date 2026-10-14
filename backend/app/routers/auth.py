@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user
-from ..models import Block, User
+from datetime import timedelta
+
+from ..models import Block, User, utcnow
 from ..schemas import AuthOut, LoginIn, MeOut, MeUpdate, RegisterIn, ResetIn, UserOut
 from ..security import hash_secret, make_token, new_recovery_key, normalize_recovery_key, verify_secret
 
@@ -69,7 +71,8 @@ def reset(data: ResetIn, db: Session = Depends(get_db)):
 
 def _me(db: Session, user: User) -> MeOut:
     n = db.scalar(select(func.count()).select_from(Block).where(Block.blocker_id == user.id)) or 0
-    return MeOut(id=user.id, username=user.username, name=user.name, status=user.status, email=user.email, blocked_count=n)
+    return MeOut(id=user.id, username=user.username, name=user.name, status=user.status, email=user.email,
+                 blocked_count=n, status_until=user.status_until)
 
 
 @router.get("/me", response_model=MeOut)
@@ -83,5 +86,7 @@ def update_me(data: MeUpdate, user: User = Depends(current_user), db: Session = 
         user.name = data.name.strip()
     if data.status is not None:
         user.status = data.status.strip()
+        hours = data.status_hours or 0
+        user.status_until = utcnow() + timedelta(hours=hours) if (user.status and hours) else None
     db.commit()
     return _me(db, user)
