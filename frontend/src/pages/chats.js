@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { $, actions, esc, toast } from '../ui.js';
+import { $, actions, avatar, esc, toast } from '../ui.js';
 
 export function mount(root, ctx) {
   let friends = [], open = null, msgs = [];
@@ -22,7 +22,7 @@ export function mount(root, ctx) {
   function list() {
     open = null; msgs = [];
     root.innerHTML = friends.length
-      ? friends.map(f => `<div class="p"><div class="t">${esc(f.user.name)}</div><div class="meta">@${esc(f.user.username)}${f.user.status ? ' \u00b7 ' + esc(f.user.status) : ''}</div>
+      ? friends.map(f => `<div class="p"><div class="b" style="align-items:center;gap:12px">${avatar(f.user.name)}<div class="grow"><div class="t">${esc(f.user.name)}</div><div class="meta">@${esc(f.user.username)}${f.user.status ? ' \u00b7 ' + esc(f.user.status) : ''}</div></div></div>
         <div class="act"><button class="keep" data-act="open" data-id="${f.friendship_id}">Chat</button></div></div>`).join('')
       : '<div class="empty">Add a friend first, then you can chat.</div>';
   }

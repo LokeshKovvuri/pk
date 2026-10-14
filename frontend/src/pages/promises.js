@@ -1,14 +1,16 @@
 import { api } from '../api.js';
-import { $, actions, attr, confirmTap, copyText, daysUntil, dueText, esc, plusDays, toast } from '../ui.js';
+import { $, actions, attr, avatar, confirmTap, copyText, daysUntil, duePill, esc, isoDate, plusDays, toast } from '../ui.js';
 
 export function mount(root, ctx) {
-  let sub = 'owe', items = [], q = '', editId = null, timer;
+  let sub = 'owe', items = [], openAll = [], closedAll = [], q = '', editId = null, timer, selDay = isoDate();
+  const known = {};
 
   root.innerHTML = `
-    <div class="seg"><button data-s="owe" class="on">I owe</button><button data-s="owed">They owe</button><button data-s="history">History</button></div>
+    <div class="seg"><button data-s="owe" class="on">I owe</button><button data-s="owed">They owe</button><button data-s="week">Week</button><button data-s="history">History</button></div>
     <div id="pl"></div>
     <button class="fab" data-act="new">+ New promise</button>
     <dialog id="dlg">
+      <div class="handle"></div>
       <h2 id="dt">New promise</h2>
       <label for="f-dir">Who made it?</label>
       <select id="f-dir"><option value="mine">I promised someone</option><option value="theirs">Someone promised me</option></select>
@@ -24,35 +26,60 @@ export function mount(root, ctx) {
     </dialog>`;
 
   const dlg = $('#dlg', root), list = $('#pl', root);
-  const byId = id => items.find(p => p.id === +id);
+  const remember = rows => rows.forEach(p => { known[p.id] = p; });
 
   async function load() {
-    const status = sub === 'history' ? 'closed' : 'open';
-    items = await api(`/promises?status=${status}${q ? '&q=' + encodeURIComponent(q) : ''}`);
+    if (sub === 'history') {
+      items = await api(`/promises?status=closed${q ? '&q=' + encodeURIComponent(q) : ''}`);
+      remember(items);
+    } else if (sub === 'week') {
+      [openAll, closedAll] = await Promise.all([api('/promises?status=open'), api('/promises?status=closed')]);
+      remember(openAll);
+    } else {
+      items = await api('/promises?status=open');
+      remember(items);
+    }
     draw();
   }
 
   function card(p) {
-    const mine = p.direction === 'mine', late = p.due && daysUntil(p.due) < 0;
-    return `<div class="p ${mine ? '' : 'theirs'} ${late ? 'late' : ''}"><div class="t">${esc(p.text)}</div>
-      ${p.note ? `<div class="meta">${esc(p.note)}</div>` : ''}
-      <div class="meta">${mine ? 'To' : 'From'} ${esc(p.person)} \u00b7 ${dueText(p.due)}${p.repeat ? ' \u00b7 repeats ' + p.repeat : ''}</div>
-      <div class="act"><button class="keep" data-act="kept" data-id="${p.id}">${mine ? 'I kept it' : 'They kept it'}</button>
-      <button data-act="broken" data-id="${p.id}">${mine ? 'I missed it' : 'They missed it'}</button>
-      <button data-act="edit" data-id="${p.id}">Edit</button><button data-act="msg" data-id="${p.id}">Message</button>
-      <button class="del" data-act="del" data-id="${p.id}">Delete</button></div></div>`;
+    const mine = p.direction === 'mine', late = p.due && daysUntil(p.due) < 0, id = ` data-id="${p.id}"`;
+    return `<div class="p ${late ? 'late' : ''}"><div class="b" style="align-items:center;gap:12px">${avatar(p.person)}
+      <div class="grow"><div class="t">${esc(p.text)}</div><div class="meta">${mine ? 'To' : 'From'} ${esc(p.person)}${p.note ? ' \u00b7 ' + esc(p.note) : ''}${p.repeat ? ' \u00b7 repeats ' + p.repeat : ''}</div></div>${duePill(p.due)}</div>
+      <div class="act"><button class="keep" data-act="kept"${id}>${mine ? 'I kept it' : 'They kept it'}</button>
+      <button data-act="broken"${id}>${mine ? 'I missed it' : 'They missed it'}</button>
+      <button data-act="msg"${id}>Message</button><button data-act="edit"${id}>Edit</button>
+      <button class="del" data-act="del"${id}>Delete</button></div></div>`;
   }
 
   function historyCard(p) {
-    return `<div class="p" style="border-left-color:var(--${p.status === 'kept' ? 'good' : 'bad'})"><div class="t">${esc(p.text)}</div>
-      <div class="meta">${p.direction === 'mine' ? 'To' : 'From'} ${esc(p.person)} \u00b7 ${p.status === 'kept' ? 'Kept' : 'Missed'}${p.late ? ' (late)' : ''} \u00b7 ${new Date(p.closed_at).toLocaleDateString()}</div>
+    const kept = p.status === 'kept';
+    return `<div class="p"><div class="b" style="align-items:center;gap:12px">${avatar(p.person)}
+      <div class="grow"><div class="t">${esc(p.text)}</div><div class="meta">${p.direction === 'mine' ? 'To' : 'From'} ${esc(p.person)} \u00b7 ${new Date(p.closed_at).toLocaleDateString()}</div></div>
+      <span class="pill ${kept ? 'mint' : 'red'}">${kept ? 'Kept' : 'Missed'}${p.late ? ' (late)' : ''}</span></div>
       <div class="act"><button data-act="reopen" data-id="${p.id}">Reopen</button><button class="del" data-act="del" data-id="${p.id}">Delete</button></div></div>`;
   }
 
+  function drawWeek() {
+    const t = new Date(), mon = new Date(t);
+    mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    const days = [...Array(7)].map((_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return isoDate(d); });
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const inWeek = iso => iso >= days[0] && iso <= days[6];
+    const doneN = closedAll.filter(p => p.closed_at && inWeek(isoDate(new Date(p.closed_at)))).length;
+    const dueN = openAll.filter(p => p.due && inWeek(p.due)).length;
+    const total = doneN + dueN, pct = total ? Math.round(doneN / total * 100) : 0, today = isoDate();
+    const day = openAll.filter(p => p.due === selDay || (selDay === today && p.due && p.due < today));
+    const label = selDay === today ? 'Today' : new Date(selDay + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    list.innerHTML = `<div class="p strip">${days.map((iso, i) => `<button class="day ${iso === selDay ? 'on' : ''}" data-act="day" data-d="${iso}"><small>${names[i]}</small><b>${+iso.slice(8)}</b><i class="${openAll.some(p => p.due === iso) ? 'dot' : ''}"></i></button>`).join('')}</div>
+      <div class="p"><div class="rl" style="margin:0"><b>Week progress</b><span>${doneN} of ${total} done</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>
+      <div class="group">${esc(label)}</div>${day.length ? day.map(card).join('') : '<div class="empty">Nothing due. Enjoy the day.</div>'}`;
+  }
+
   function draw() {
+    if (sub === 'week') return drawWeek();
     if (sub === 'history') {
-      const has = $('#hq', root);
-      if (!has) list.innerHTML = '<input id="hq" type="search" placeholder="Search promises or people" aria-label="Search" style="margin-bottom:12px"><div id="hl"></div>';
+      if (!$('#hq', root)) list.innerHTML = '<input id="hq" type="search" placeholder="Search promises or people" aria-label="Search" style="margin-bottom:12px"><div id="hl"></div>';
       $('#hl', root).innerHTML = items.length ? items.map(historyCard).join('') : `<div class="empty">${q ? 'No matches.' : 'Closed promises will appear here.'}</div>`;
       return;
     }
@@ -63,7 +90,10 @@ export function mount(root, ctx) {
     }
     const g = { Overdue: [], 'This week': [], Later: [], 'No date': [] };
     open.forEach(p => { if (!p.due) g['No date'].push(p); else { const n = daysUntil(p.due); (n < 0 ? g.Overdue : n <= 7 ? g['This week'] : g.Later).push(p); } });
-    list.innerHTML = Object.entries(g).filter(([, v]) => v.length).map(([k, v]) => `<div class="group">${k}</div>${v.map(card).join('')}`).join('');
+    const chip = (n, l, k) => `<div class="sumc ${k}"><b>${n}</b><span>${l}</span></div>`;
+    const today = open.filter(p => p.due && daysUntil(p.due) === 0).length;
+    list.innerHTML = `<div class="sum">${chip(g.Overdue.length, 'Overdue', 'red')}${chip(today, 'Today', 'amber')}${chip(g['This week'].length, 'This week', 'mint')}</div>` +
+      Object.entries(g).filter(([, v]) => v.length).map(([k, v]) => `<div class="group">${k}</div>${v.map(card).join('')}`).join('');
   }
 
   function openForm(p) {
@@ -73,10 +103,10 @@ export function mount(root, ctx) {
     $('#f-text', root).value = p ? p.text : '';
     $('#f-person', root).value = p ? p.person : '';
     $('#f-note', root).value = p ? p.note : '';
-    $('#f-due', root).value = p && p.due ? p.due : '';
+    $('#f-due', root).value = p && p.due ? p.due : (!p && sub === 'week' ? selDay : '');
     $('#f-rep', root).value = p ? p.repeat : '';
     $('#err', root).textContent = '';
-    $('#people', root).innerHTML = [...new Set(items.map(i => i.person))].map(n => `<option value="${attr(n)}">`).join('');
+    $('#people', root).innerHTML = [...new Set(Object.values(known).map(i => i.person))].map(n => `<option value="${attr(n)}">`).join('');
     dlg.showModal();
     $('#f-text', root).focus();
   }
@@ -89,7 +119,7 @@ export function mount(root, ctx) {
       await api(editId ? `/promises/${editId}` : '/promises', { method: editId ? 'PATCH' : 'POST', body });
     } catch (e) { $('#err', root).textContent = e.message; return; }
     dlg.close();
-    if (!editId) sub = body.direction === 'mine' ? 'owe' : 'owed';
+    if (!editId && sub !== 'week') sub = body.direction === 'mine' ? 'owe' : 'owed';
     setSeg();
     await load();
     ctx.refreshHeader();
@@ -112,9 +142,10 @@ export function mount(root, ctx) {
     if (act === 'new') return openForm(null);
     if (act === 'cancel') return dlg.close();
     if (act === 'save') return save();
-    if (act === 'edit') return openForm(byId(id));
+    if (act === 'day') { selDay = b.dataset.d; return drawWeek(); }
+    if (act === 'edit') return openForm(known[id]);
     if (act === 'msg') {
-      const p = byId(id), late = p.due && daysUntil(p.due) < 0;
+      const p = known[id], late = p.due && daysUntil(p.due) < 0;
       const text = p.direction === 'theirs' ? `Hi ${p.person}, a friendly reminder about: ${p.text}. No rush if plans changed, just let me know!`
         : `Hi ${p.person}, I haven't forgotten: ${p.text}. ${late ? 'Sorry it is late. ' : ''}I'll get it done soon.`;
       b.textContent = (await copyText(text)) ? 'Copied' : 'Copy failed';

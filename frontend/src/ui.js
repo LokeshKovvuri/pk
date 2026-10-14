@@ -64,3 +64,26 @@ export function actions(root, handler) {
     try { await handler(b.dataset.act, b, e); } catch (err) { toast(err.message || 'Something went wrong'); }
   });
 }
+
+/* ---- appearance + small view helpers ---- */
+export const getTheme = () => localStorage.getItem('pk-theme') || 'auto';
+export function setTheme(t) {
+  if (t === 'auto') { localStorage.removeItem('pk-theme'); document.documentElement.removeAttribute('data-theme'); }
+  else { localStorage.setItem('pk-theme', t); document.documentElement.dataset.theme = t; }
+}
+export function applyTheme() { const t = localStorage.getItem('pk-theme'); if (t) document.documentElement.dataset.theme = t; }
+
+export function avatar(name, size = 40) {
+  const s = String(name || '?').trim();
+  const tint = [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 4;
+  return `<div class="av t${tint}" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.4)}px">${esc(s[0] || '?').toUpperCase()}</div>`;
+}
+
+export function duePill(due) {
+  if (!due) return '<span class="pill gray">No date</span>';
+  const n = daysUntil(due);
+  if (n < 0) return `<span class="pill red">${-n}d overdue</span>`;
+  if (n === 0) return '<span class="pill amber">Today</span>';
+  if (n === 1) return '<span class="pill amber">Tomorrow</span>';
+  return `<span class="pill ${n <= 7 ? 'mint' : 'gray'}">In ${n} days</span>`;
+}

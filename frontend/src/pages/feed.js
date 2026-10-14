@@ -1,11 +1,11 @@
 import { api } from '../api.js';
-import { $, actions, ago, confirmTap, esc, toast } from '../ui.js';
+import { $, actions, ago, avatar, confirmTap, esc, toast } from '../ui.js';
 
 export function mount(root, ctx) {
   let data = { stories: [], posts: [] };
 
-  const card = (p, story) => `<div class="p"><div class="t">${esc(p.text)}</div>
-    <div class="meta">${esc(p.author.name)} @${esc(p.author.username)} \u00b7 ${ago(p.created_at)}${story ? ` \u00b7 ends in ${Math.max(1, Math.round((new Date(p.expires_at) - Date.now()) / 36e5))}h` : ''}</div>
+  const card = (p, story) => `<div class="p"><div class="b" style="align-items:center;gap:10px">${avatar(p.author.name, 36)}<div class="grow"><div class="t">${esc(p.author.name)}</div><div class="meta" style="margin:0">@${esc(p.author.username)} \u00b7 ${ago(p.created_at)}</div></div></div><div style="margin:10px 0">${esc(p.text)}</div>
+    <div class="meta">${''}${story ? ` \u00b7 ends in ${Math.max(1, Math.round((new Date(p.expires_at) - Date.now()) / 36e5))}h` : ''}</div>
     <div class="act"><button data-act="like" data-id="${p.id}">${p.liked ? '\u2665' : '\u2661'} ${p.likes}</button>
     ${p.mine ? `<button class="del" data-act="del" data-id="${p.id}">Delete</button>` : `<button class="del" data-act="report" data-id="${p.id}">Report</button>`}</div></div>`;
 

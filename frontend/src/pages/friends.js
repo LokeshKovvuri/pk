@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { $, actions, confirmTap, esc, toast } from '../ui.js';
+import { $, actions, avatar, confirmTap, esc, toast } from '../ui.js';
 
 export function mount(root) {
   let friends = [], reqs = { incoming: [], outgoing: [] };
@@ -14,7 +14,7 @@ export function mount(root) {
       ${reqs.outgoing.length ? `<div class="group">Sent</div>${reqs.outgoing.map(r => `<div class="p"><div class="t">${esc(r.user.name)}</div><div class="meta">@${esc(r.user.username)} \u00b7 waiting</div>
         <div class="act"><button data-act="decline" data-id="${r.id}">Cancel</button></div></div>`).join('')}` : ''}
       <div class="group">Your friends</div>
-      ${friends.length ? friends.map(f => `<div class="p"><div class="t">${esc(f.user.name)}</div><div class="meta">@${esc(f.user.username)}${f.user.status ? ' \u00b7 ' + esc(f.user.status) : ''}</div>
+      ${friends.length ? friends.map(f => `<div class="p"><div class="b" style="align-items:center;gap:12px">${avatar(f.user.name)}<div class="grow"><div class="t">${esc(f.user.name)}</div><div class="meta">@${esc(f.user.username)}${f.user.status ? ' \u00b7 ' + esc(f.user.status) : ''}</div></div></div>
         <div class="act"><button data-act="unfriend" data-id="${f.friendship_id}">Unfriend</button><button data-act="block" data-id="${f.user.id}">Block</button><button class="del" data-act="report" data-id="${f.user.id}">Report</button></div></div>`).join('')
         : '<div class="empty">No friends yet. Search a username above.</div>'}`;
   }
